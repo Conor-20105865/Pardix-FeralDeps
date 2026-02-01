@@ -1,0 +1,317 @@
+FERALDEPS HYBRID MONETIZATION IMPLEMENTATION TODO
+==================================================
+
+PHASE 1: CODE PREPARATION (Week 1-2)
+-------------------------------------
+[ ] Refactor to plugin architecture
+    [ ] Create UpdateStrategy interface (ManualUpdateStrategy vs AutoUpdateStrategy)
+    [ ] Create DependencyScanner interface
+    [ ] Create VulnerabilityChecker interface
+    [ ] Create VersionChecker interface
+    [ ] Extract core interfaces to separate package
+
+[ ] Add license manager skeleton
+    [ ] Create LicenseManager class
+    [ ] Add Edition enum (COMMUNITY, PRO, ENTERPRISE)
+    [ ] Implement hasFeature() method
+    [ ] Add license file storage (.feraldeps-license)
+    [ ] Always return true for now (testing mode)
+
+[ ] Test that everything still works
+    [ ] Run all existing functionality
+    [ ] Verify GUI loads correctly
+    [ ] Verify CLI mode works
+    [ ] Fix any breaking changes
+
+PHASE 2: CREATE EDITIONS (Week 3)
+----------------------------------
+[ ] Setup repository structure
+    [ ] Option A: Create separate repos (feraldeps-core, feraldeps-pro, feraldeps-enterprise)
+    [ ] Option B: Single repo with core/pro/enterprise modules
+    [ ] Decide on approach and implement
+
+[ ] Create Open Source Core Edition
+    [ ] Copy current codebase to core branch
+    [ ] Remove auto-update features (keep manual instructions only)
+    [ ] Remove compilation testing
+    [ ] Keep basic scanning and CLI
+    [ ] Keep simple GUI with read-only views
+    [ ] Add MIT/Apache 2.0 LICENSE-CORE file
+
+[ ] Create Pro Edition
+    [ ] Copy full codebase to pro branch
+    [ ] Add license validation hooks
+    [ ] Gate auto-update feature behind license check
+    [ ] Gate compilation testing behind license check
+    [ ] Gate ignore lists behind license check
+    [ ] Add upgrade prompts for locked features
+    [ ] Add LICENSE-COMMERCIAL file
+
+[ ] Create Enterprise Edition
+    [ ] Copy pro edition to enterprise branch
+    [ ] Plan CI/CD plugin architecture
+    [ ] Plan SBOM export feature
+    [ ] Plan team collaboration features
+    [ ] Add enterprise branding
+
+[ ] UI differentiation
+    [ ] Add edition name to window title (Community/Pro/Enterprise)
+    [ ] Add upgrade banner for Community edition
+    [ ] Change update buttons to "Upgrade to Update" in Community
+    [ ] Add showUpgradeDialog() method
+    [ ] Add pricing page link handler
+
+[ ] Test each edition separately
+    [ ] Test Community: Verify features are read-only
+    [ ] Test Pro: Verify all features work with valid license
+    [ ] Test Pro: Verify features blocked without license
+    [ ] Test Enterprise: Verify additional features
+
+PHASE 3: LICENSE SYSTEM (Week 4)
+---------------------------------
+[ ] Generate RSA key pair
+    [ ] Create 2048-bit RSA private key (KEEP SECRET!)
+    [ ] Create corresponding public key (ship with app)
+    [ ] Store private key securely on server
+    [ ] Add public key to application resources
+
+[ ] Implement license key generation (server-side)
+    [ ] Create LicenseGenerator class (server-side only)
+    [ ] Implement license data structure (JSON with email, edition, dates)
+    [ ] Implement RSA signature generation
+    [ ] Create license key format: EDITION-XXXXX-XXXXX-XXXXX-SIGNATURE
+    [ ] Test key generation
+
+[ ] Implement license validation (client-side)
+    [ ] Implement isValidFormat() check
+    [ ] Implement RSA signature verification with public key
+    [ ] Implement expiration date checking
+    [ ] Implement encrypted local storage (AES-256)
+    [ ] Add loadLicense() on application startup
+    [ ] Add activateLicense() method
+
+[ ] Build license management UI
+    [ ] Create "Enter License Key" dialog
+    [ ] Add "Help" -> "Activate License" menu item
+    [ ] Add license status to about dialog
+    [ ] Show expiration date if applicable
+    [ ] Add "Check for Updates" feature (requires valid license for Pro/Enterprise)
+
+PHASE 4: BACKEND INFRASTRUCTURE (Week 4-5)
+-------------------------------------------
+[ ] Choose payment provider
+    [ ] Research: Gumroad vs Stripe vs Paddle vs FastSpring
+    [ ] Create account
+    [ ] Setup tax handling (VAT/sales tax)
+    [ ] Configure products (Pro annual, Pro lifetime, Enterprise)
+
+[ ] Build license server
+    [ ] Setup Node.js/Express.js server (or Python/Flask)
+    [ ] Setup database (PostgreSQL recommended)
+    [ ] Create database schema:
+        - licenses table (id, email, license_key, edition, sale_id, created_at, expires_at)
+        - activations table (id, license_id, machine_id, activated_at)
+    [ ] Implement /webhook/gumroad or /webhook/stripe endpoint
+    [ ] Implement license generation on purchase
+    [ ] Implement email sending (SendGrid/Mailgun)
+    [ ] Implement /api/activate endpoint
+    [ ] Implement /api/validate endpoint
+    [ ] Add rate limiting
+    [ ] Add logging
+
+[ ] Deploy backend
+    [ ] Choose hosting (Heroku, DigitalOcean, AWS, etc.)
+    [ ] Setup SSL certificate
+    [ ] Configure environment variables
+    [ ] Deploy and test
+    [ ] Setup monitoring (UptimeRobot, etc.)
+
+[ ] Test end-to-end flow
+    [ ] Make test purchase
+    [ ] Verify webhook triggers
+    [ ] Verify license key generated
+    [ ] Verify email sent
+    [ ] Activate license in app
+    [ ] Verify features unlock
+
+PHASE 5: LEGAL & COMPLIANCE (Week 5)
+-------------------------------------
+[ ] Create legal documents
+    [ ] Write Terms of Service
+    [ ] Write Privacy Policy
+    [ ] Write Refund Policy (e.g., 30-day money back)
+    [ ] Write End User License Agreement (EULA)
+    [ ] Consult lawyer if possible
+
+[ ] Business setup
+    [ ] Register business entity (LLC recommended)
+    [ ] Get EIN/tax ID
+    [ ] Setup business bank account
+    [ ] Setup accounting system (QuickBooks, etc.)
+
+[ ] Compliance
+    [ ] GDPR compliance for EU customers (if applicable)
+    [ ] Cookie policy for website
+    [ ] Data retention policy
+    [ ] Setup refund process
+
+PHASE 6: MARKETING & LAUNCH PREP (Week 6)
+------------------------------------------
+[ ] Create marketing website
+    [ ] Homepage with value proposition
+    [ ] Features comparison table (Community vs Pro vs Enterprise)
+    [ ] Pricing page
+    [ ] Documentation/tutorials
+    [ ] Download page
+    [ ] FAQ section
+    [ ] Contact form
+
+[ ] Create supporting content
+    [ ] Write blog post: "Why We Built FeralDeps"
+    [ ] Create demo video (2-3 minutes)
+    [ ] Create screenshots for all features
+    [ ] Write documentation for Pro features
+    [ ] Create quick start guide
+
+[ ] Setup analytics
+    [ ] Google Analytics on website
+    [ ] Usage analytics in app (respect privacy!)
+    [ ] Conversion tracking
+    [ ] Error reporting (Sentry, etc.)
+
+[ ] Prepare launch communications
+    [ ] Write announcement blog post
+    [ ] Prepare Reddit posts (r/java, r/programming)
+    [ ] Prepare Hacker News submission
+    [ ] Prepare social media posts
+    [ ] Email list for beta testers (if any)
+
+PHASE 7: SOFT LAUNCH (Week 7)
+------------------------------
+[ ] Release Community Edition
+    [ ] Publish to GitHub as open source
+    [ ] Tag release v1.0.0-community
+    [ ] Create GitHub Release with binaries
+    [ ] Submit to Maven Central (optional)
+    [ ] Announce on social media
+
+[ ] Release Pro Edition (Early Access)
+    [ ] Create private distribution channel
+    [ ] Offer early access discount (e.g., $19 instead of $29)
+    [ ] Limit to first 50-100 customers
+    [ ] Create feedback collection system
+    [ ] Monitor for bugs closely
+
+[ ] Gather feedback
+    [ ] Email customers for feedback
+    [ ] Monitor support requests
+    [ ] Track feature requests
+    [ ] Fix critical bugs immediately
+    [ ] Plan improvements
+
+PHASE 8: PUBLIC LAUNCH (Week 8+)
+---------------------------------
+[ ] Official launch
+    [ ] Remove "Early Access" label
+    [ ] Set final pricing
+    [ ] Announce on all channels
+    [ ] Submit to ProductHunt
+    [ ] Submit to Hacker News
+    [ ] Post on Reddit
+    [ ] Reach out to tech blogs/podcasts
+
+[ ] Content marketing
+    [ ] Write technical blog posts about dependency security
+    [ ] Create YouTube tutorials
+    [ ] Guest post on other blogs
+    [ ] Speak at meetups/conferences
+    [ ] Contribute to open source projects and mention tool
+
+[ ] Community building
+    [ ] Create Discord/Slack community
+    [ ] Respond to GitHub issues quickly
+    [ ] Accept pull requests to core
+    [ ] Feature community contributions
+    [ ] Create contributor guidelines
+
+PHASE 9: ENTERPRISE FEATURES (Ongoing)
+---------------------------------------
+[ ] Build CI/CD plugins
+    [ ] GitHub Actions plugin
+    [ ] Jenkins plugin
+    [ ] GitLab CI plugin
+    [ ] Azure DevOps plugin
+
+[ ] SBOM export
+    [ ] CycloneDX format
+    [ ] SPDX format
+    [ ] Export options in GUI
+    [ ] CLI command for SBOM generation
+
+[ ] Team features
+    [ ] Shared ignore lists
+    [ ] Centralized policy management
+    [ ] Team dashboard
+    [ ] Role-based access control
+
+[ ] Advanced features
+    [ ] SSO integration (SAML/OAuth)
+    [ ] Custom vulnerability sources
+    [ ] Private repository support
+    [ ] Scheduled scanning
+    [ ] Slack/Email notifications
+    [ ] Audit logging
+
+ONGOING MAINTENANCE
+-------------------
+[ ] Customer support
+    [ ] Setup support email/system
+    [ ] Create knowledge base
+    [ ] Monitor support requests
+    [ ] Maintain fast response time
+
+[ ] Regular updates
+    [ ] Monthly feature releases
+    [ ] Security updates as needed
+    [ ] Bug fixes within 48 hours
+    [ ] Keep dependencies updated (dogfood own tool!)
+
+[ ] Marketing
+    [ ] Regular blog posts (bi-weekly)
+    [ ] Social media presence
+    [ ] Email newsletter (monthly)
+    [ ] SEO optimization
+    [ ] Partnership opportunities
+
+[ ] Metrics tracking
+    [ ] Monthly recurring revenue (MRR)
+    [ ] Customer acquisition cost (CAC)
+    [ ] Churn rate
+    [ ] Conversion rate (free to paid)
+    [ ] Support ticket volume
+    [ ] GitHub stars/forks
+
+MILESTONES
+----------
+[ ] Week 2: Core refactored with plugin architecture
+[ ] Week 3: All three editions buildable and testable
+[ ] Week 4: License system fully implemented
+[ ] Week 5: Backend live and accepting test purchases
+[ ] Week 6: Marketing site live
+[ ] Week 7: Soft launch complete, first paying customers
+[ ] Week 8: Public launch
+[ ] Month 3: Break even on hosting costs
+[ ] Month 6: 100 paying customers
+[ ] Year 1: Sustainable full-time income
+
+NOTES
+-----
+- Keep private key absolutely secret - never commit to repo
+- Test license validation thoroughly before launch
+- Be prepared for support volume after launch
+- Consider 14-day free trial for Pro features
+- Consider team discounts (5+ licenses = 20% off)
+- Track which features drive most upgrades
+- Listen to customer feedback for new features
+- Open source core = trust + contributions + marketing
+- Focus on developer experience (your users are developers!)

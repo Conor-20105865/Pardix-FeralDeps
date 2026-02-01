@@ -1,14 +1,35 @@
 package com.pardixlabs.feraldeps;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Image;
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JDialog;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.border.EmptyBorder;
 
 public class GuiMain extends JFrame {
     private JPanel allDepsPanel;
@@ -387,22 +408,40 @@ public class GuiMain extends JFrame {
             
             if (latestVersion != null) {
                 if (!latestVersion.equals(dep.version)) {
-                    info.append("<span style='color:#FF6600;'>⚠ Outdated → latest: ").append(latestVersion).append("</span>");
+                    info.append("<span style='color:#FF6600;'>WARNING: Outdated → latest: ").append(latestVersion).append("</span>");
                     if (dep.isVersionLocked()) {
                         info.append("<span style='color:#FF0000;'> (Version LOCKED - may break if upgraded)</span>");
                     }
+                    info.append("<br><span style='color:#0066CC;'>REMEDIATION: Update to &lt;version&gt;").append(latestVersion).append("&lt;/version&gt;</span>");
                 } else {
-                    info.append("<span style='color:#00AA00;'>✓ Up-to-date (latest: ").append(latestVersion).append(")</span>");
+                    info.append("<span style='color:#00AA00;'>Up-to-date (latest: ").append(latestVersion).append(")</span>");
                 }
             } else {
                 info.append("<span style='color:#888;'>? No version info available</span>");
             }
             
             if (isVulnerable) {
-                info.append("<br><span style='color:#FF0000;'><b>⚠ VULNERABLE - Security issues detected</b></span>");
+                info.append("<br><span style='color:#FF0000;'><b>WARNING: VULNERABLE - Security issues detected</b></span>");
                 if (dep.isVersionLocked()) {
                     info.append("<span style='color:#FF0000;'> (CRITICAL: Vulnerable version is LOCKED)</span>");
                 }
+                
+                // Get specific remediation from OSV
+                VulnerabilityDatabase.getRemediationInfo(dep).ifPresent(remediation -> {
+                    if (remediation.hasRemediation && !remediation.fixedVersions.isEmpty()) {
+                        info.append("<br><span style='color:#CC0000;'><b>URGENT Remediation:</b> Upgrade to secure version:</span>");
+                        for (String fixedVer : remediation.fixedVersions) {
+                            info.append("<br><span style='color:#CC0000;'>  • &lt;version&gt;").append(fixedVer).append("&lt;/version&gt; (fixes vulnerabilities)</span>");
+                        }
+                        if (!remediation.summary.isEmpty()) {
+                            info.append("<br><span style='color:#666;font-size:10px;'>Issue: ").append(remediation.summary).append("</span>");
+                        }
+                    } else if (latestVersion != null) {
+                        info.append("<br><span style='color:#CC0000;'><b>URGENT Remediation:</b> Update to secure version &lt;version&gt;").append(latestVersion).append("&lt;/version&gt;</span>");
+                    } else {
+                        info.append("<br><span style='color:#CC0000;'><b>Remediation:</b> Find secure alternative at mvnrepository.com</span>");
+                    }
+                });
             }
             
             info.append("</html>");
@@ -410,7 +449,232 @@ public class GuiMain extends JFrame {
             JLabel infoLabel = new JLabel(info.toString());
             infoLabel.setBorder(new EmptyBorder(0, 5, 0, 5));
             add(infoLabel, BorderLayout.CENTER);
+            
+            // Add update button on the right for outdated or vulnerable dependencies
+            if (latestVersion != null && !latestVersion.equals(dep.version)) {
+                JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+                JButton updateButton = new JButton("Update");
+                updateButton.setToolTipText("Update to version " + latestVersion + " in pom.xml");
+                updateButton.addActionListener(e -> updateDependency(dep, latestVersion, pomFile));
+                buttonPanel.add(updateButton);
+                add(buttonPanel, BorderLayout.EAST);
+            } else if (isVulnerable) {
+                // For vulnerable dependencies, show update button with first fixed version
+                VulnerabilityDatabase.getRemediationInfo(dep).ifPresent(remediation -> {
+                    if (remediation.hasRemediation && !remediation.fixedVersions.isEmpty()) {
+                        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+                        String fixVersion = remediation.fixedVersions.get(0);
+                        JButton updateButton = new JButton("Update");
+                        updateButton.setToolTipText("Update to secure version " + fixVersion + " in pom.xml");
+                        updateButton.addActionListener(e -> updateDependency(dep, fixVersion, pomFile));
+                        buttonPanel.add(updateButton);
+                        add(buttonPanel, BorderLayout.EAST);
+                    }
+                });
+            }
         }
+    }
+    
+    /**
+     * Update a dependency in the pom.xml file
+     */
+    private void updateDependency(Dependency dep, String newVersion, File pomFile) {
+        // Show confirmation dialog with warning
+        int choice = JOptionPane.showOptionDialog(this,
+            "Update " + dep.coordinate() + " from " + dep.version + " to " + newVersion + "?\n\n" +
+            "Options:\n" +
+            "• Update & Test: Update and compile to verify it works\n" +
+            "• Update Only: Update without testing (faster)\n" +
+            "• Cancel: Don't update",
+            "Confirm Update",
+            JOptionPane.YES_NO_CANCEL_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+            new Object[]{"Update & Test", "Update Only", "Cancel"},
+            "Update & Test");
+        
+        if (choice == JOptionPane.CANCEL_OPTION || choice == JOptionPane.CLOSED_OPTION) {
+            return; // User cancelled
+        }
+        
+        boolean runTest = (choice == JOptionPane.YES_OPTION);
+        
+        try {
+            // Read the pom.xml file
+            String content = new String(java.nio.file.Files.readAllBytes(pomFile.toPath()));
+            String originalContent = content;
+            
+            // Try to find and update the specific dependency
+            // Pattern: <groupId>group</groupId><artifactId>artifact</artifactId><version>oldVersion</version>
+            // We need to be careful to match the exact dependency
+            
+            String[] lines = content.split("\n");
+            StringBuilder updatedContent = new StringBuilder();
+            boolean inTargetDependency = false;
+            boolean foundGroupId = false;
+            boolean foundArtifactId = false;
+            
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i];
+                
+                // Check if we're entering a dependency tag
+                if (line.trim().equals("<dependency>")) {
+                    inTargetDependency = true;
+                    foundGroupId = false;
+                    foundArtifactId = false;
+                }
+                
+                // Check if this is our target dependency
+                if (inTargetDependency) {
+                    if (line.contains("<groupId>" + dep.groupId + "</groupId>")) {
+                        foundGroupId = true;
+                    }
+                    if (line.contains("<artifactId>" + dep.artifactId + "</artifactId>")) {
+                        foundArtifactId = true;
+                    }
+                    
+                    // If we found both groupId and artifactId, update the version
+                    if (foundGroupId && foundArtifactId && line.contains("<version>")) {
+                        String indent = line.substring(0, line.indexOf("<version>"));
+                        line = indent + "<version>" + newVersion + "</version>";
+                        inTargetDependency = false; // We found and updated it
+                    }
+                    
+                    // Reset if we exit the dependency tag
+                    if (line.trim().equals("</dependency>")) {
+                        inTargetDependency = false;
+                    }
+                }
+                
+                updatedContent.append(line).append("\n");
+            }
+            
+            // Write back to file if content changed
+            String newContent = updatedContent.toString();
+            if (!newContent.equals(originalContent)) {
+                java.nio.file.Files.write(pomFile.toPath(), newContent.getBytes());
+                
+                if (runTest) {
+                    // Test the update by trying to compile
+                    testDependencyUpdate(dep, newVersion, pomFile, originalContent);
+                } else {
+                    // Show success message without testing
+                    JOptionPane.showMessageDialog(this,
+                        "Successfully updated " + dep.coordinate() + " from " + dep.version + " to " + newVersion + "\n" +
+                        "File: " + pomFile.getName() + "\n\n" +
+                        "Please rescan the project to see the changes.",
+                        "Dependency Updated",
+                        JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "Could not find the dependency in " + pomFile.getName() + "\n" +
+                    "The dependency may be inherited from a parent POM.",
+                    "Update Failed",
+                    JOptionPane.WARNING_MESSAGE);
+            }
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                "Error updating dependency: " + ex.getMessage(),
+                "Update Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Test if the dependency update breaks compilation
+     */
+    private void testDependencyUpdate(Dependency dep, String newVersion, File pomFile, String originalContent) {
+        // Show progress dialog
+        JDialog progressDialog = new JDialog(this, "Testing Update", true);
+        JLabel progressLabel = new JLabel("Compiling with new dependency version...");
+        progressLabel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        progressDialog.add(progressLabel);
+        progressDialog.pack();
+        progressDialog.setLocationRelativeTo(this);
+        
+        // Run compilation in background thread
+        new Thread(() -> {
+            try {
+                File projectDir = pomFile.getParentFile();
+                
+                // Run mvn compile
+                ProcessBuilder pb = new ProcessBuilder("mvn", "clean", "compile");
+                pb.directory(projectDir);
+                pb.redirectErrorStream(true);
+                
+                Process process = pb.start();
+                
+                // Capture output
+                StringBuilder output = new StringBuilder();
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                    }
+                }
+                
+                int exitCode = process.waitFor();
+                
+                SwingUtilities.invokeLater(() -> {
+                    progressDialog.dispose();
+                    
+                    if (exitCode == 0) {
+                        // Compilation successful
+                        JOptionPane.showMessageDialog(this,
+                            "Update successful!\n\n" +
+                            dep.coordinate() + ": " + dep.version + " → " + newVersion + "\n" +
+                            "File: " + pomFile.getName() + "\n\n" +
+                            "Project compiled successfully with the new version.\n" +
+                            "Please rescan the project to see the changes.",
+                            "Update Verified",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        // Compilation failed - offer to revert
+                        int revert = JOptionPane.showConfirmDialog(this,
+                            "WARNING: Compilation failed with new version!\n\n" +
+                            dep.coordinate() + ": " + dep.version + " → " + newVersion + "\n\n" +
+                            "The update may have introduced breaking changes.\n" +
+                            "Do you want to revert to the original version?\n\n" +
+                            "Build output:\n" + output.substring(Math.max(0, output.length() - 500)),
+                            "Compilation Failed",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.WARNING_MESSAGE);
+                        
+                        if (revert == JOptionPane.YES_OPTION) {
+                            try {
+                                // Revert the change
+                                java.nio.file.Files.write(pomFile.toPath(), originalContent.getBytes());
+                                JOptionPane.showMessageDialog(this,
+                                    "Reverted to original version: " + dep.version,
+                                    "Reverted",
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            } catch (Exception e) {
+                                JOptionPane.showMessageDialog(this,
+                                    "Error reverting: " + e.getMessage(),
+                                    "Revert Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                            }
+                        }
+                    }
+                });
+                
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    progressDialog.dispose();
+                    JOptionPane.showMessageDialog(this,
+                        "Error testing update: " + e.getMessage() + "\n\n" +
+                        "The dependency has been updated but not tested.",
+                        "Test Error",
+                        JOptionPane.WARNING_MESSAGE);
+                });
+            }
+        }).start();
+        
+        // Show the progress dialog (blocks until compilation completes)
+        progressDialog.setVisible(true);
     }
     
     /**
@@ -485,15 +749,33 @@ public class GuiMain extends JFrame {
             
             if (latestVersion != null) {
                 if (!latestVersion.equals(dep.version)) {
-                    info.append("<br><span style='color:#FF6600;'>⚠ Outdated → latest: ").append(latestVersion).append("</span>");
+                    info.append("<br><span style='color:#FF6600;'>WARNING: Outdated → latest: ").append(latestVersion).append("</span>");
                     if (dep.isVersionLocked()) {
                         info.append("<span style='color:#FF0000;'> (Version LOCKED)</span>");
                     }
+                    info.append("<br><span style='color:#0066CC;'>REMEDIATION: Update to &lt;version&gt;").append(latestVersion).append("&lt;/version&gt;</span>");
                 }
             }
             
             if (isVulnerable) {
-                info.append("<br><span style='color:#FF0000;'><b>⚠ VULNERABLE - Security issues detected</b></span>");
+                info.append("<br><span style='color:#FF0000;'><b>WARNING: VULNERABLE - Security issues detected</b></span>");
+                
+                // Get specific remediation from OSV
+                VulnerabilityDatabase.getRemediationInfo(dep).ifPresent(remediation -> {
+                    if (remediation.hasRemediation && !remediation.fixedVersions.isEmpty()) {
+                        info.append("<br><span style='color:#CC0000;'><b>URGENT Remediation:</b> Upgrade to secure version:</span>");
+                        for (String fixedVer : remediation.fixedVersions) {
+                            info.append("<br><span style='color:#CC0000;'>  • &lt;version&gt;").append(fixedVer).append("&lt;/version&gt; (fixes vulnerabilities)</span>");
+                        }
+                        if (!remediation.summary.isEmpty()) {
+                            info.append("<br><span style='color:#666;font-size:10px;'>Issue: ").append(remediation.summary).append("</span>");
+                        }
+                    } else if (latestVersion != null) {
+                        info.append("<br><span style='color:#CC0000;'><b>URGENT Remediation:</b> Update to secure version &lt;version&gt;").append(latestVersion).append("&lt;/version&gt;</span>");
+                    } else {
+                        info.append("<br><span style='color:#CC0000;'><b>Remediation:</b> Find secure alternative at mvnrepository.com</span>");
+                    }
+                });
             }
             
             info.append("</html>");
@@ -501,6 +783,29 @@ public class GuiMain extends JFrame {
             JLabel infoLabel = new JLabel(info.toString());
             infoLabel.setBorder(new EmptyBorder(0, 5, 0, 5));
             add(infoLabel, BorderLayout.CENTER);
+            
+            // Add update button on the right for outdated or vulnerable dependencies  
+            if (latestVersion != null && !latestVersion.equals(dep.version)) {
+                JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+                JButton updateButton = new JButton("Update");
+                updateButton.setToolTipText("Update to version " + latestVersion + " in pom.xml");
+                updateButton.addActionListener(e -> updateDependency(dep, latestVersion, pomFile));
+                buttonPanel.add(updateButton);
+                add(buttonPanel, BorderLayout.EAST);
+            } else if (isVulnerable) {
+                // For vulnerable dependencies, show update button with first fixed version
+                VulnerabilityDatabase.getRemediationInfo(dep).ifPresent(remediation -> {
+                    if (remediation.hasRemediation && !remediation.fixedVersions.isEmpty()) {
+                        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+                        String fixVersion = remediation.fixedVersions.get(0);
+                        JButton updateButton = new JButton("Update");
+                        updateButton.setToolTipText("Update to secure version " + fixVersion + " in pom.xml");
+                        updateButton.addActionListener(e -> updateDependency(dep, fixVersion, pomFile));
+                        buttonPanel.add(updateButton);
+                        add(buttonPanel, BorderLayout.EAST);
+                    }
+                });
+            }
         }
     }
 
